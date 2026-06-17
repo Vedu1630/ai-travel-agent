@@ -1,0 +1,435 @@
+/* Custom Variables & Utilities */
+:root {
+    --glass-bg: rgba(15, 23, 42, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --panel-shadow: none;
+    --bg-color: #0b0f19;
+    --text-color: #cbd5e1;
+    --text-header: #f8fafc;
+    --sidebar-bg: rgba(15, 23, 42, 0.2);
+    --input-bg: rgba(2, 6, 23, 0.6);
+    --input-border: rgba(255, 255, 255, 0.06);
+    --input-text: #f8fafc;
+}
+
+html.light {
+    --glass-bg: rgba(255, 255, 255, 0.95);
+    --glass-border: rgba(15, 23, 42, 0.08);
+    --panel-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.04), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+    --bg-color: #f8fafc;
+    --text-color: #334155;
+    --text-header: #0f172a;
+    --sidebar-bg: #ffffff;
+    --input-bg: #ffffff;
+    --input-border: #cbd5e1;
+    --input-text: #0f172a;
+}
+
+/* Centralized Dynamic Utility Classes */
+.text-header {
+    color: var(--text-header) !important;
+}
+.hover\:text-header:hover {
+    color: var(--text-header) !important;
+}
+.text-input {
+    color: var(--input-text) !important;
+}
+.bg-input {
+    background-color: var(--input-bg) !important;
+}
+.border-input {
+    border-color: var(--input-border) !important;
+}
+.border-glass {
+    border-color: var(--glass-border) !important;
+}
+.divide-glass > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--glass-border) !important;
+}
+
+/* Base custom font & adjustments */
+body {
+    background: radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.04) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(236, 72, 153, 0.04) 0%, transparent 40%);
+    background-color: var(--bg-color) !important;
+    color: var(--text-color) !important;
+    background-attachment: fixed;
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+::-webkit-scrollbar-track {
+    background: var(--input-bg);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--input-border);
+    border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-color);
+    opacity: 0.3;
+}
+
+/* Glassmorphism panel styling */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--panel-shadow);
+    transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Forms & Inputs Theme overrides */
+input:not([type="checkbox"]):not([type="radio"]), select, textarea {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+    color: var(--input-text) !important;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+input:not([type="checkbox"]):not([type="radio"]):focus, select:focus, textarea:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15) !important;
+}
+
+#sidebar {
+    background-color: var(--sidebar-bg) !important;
+    border-color: var(--glass-border) !important;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+header {
+    background-color: var(--glass-bg) !important;
+    border-color: var(--glass-border) !important;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+#theme-toggle {
+    background-color: var(--glass-bg) !important;
+    border-color: var(--glass-border) !important;
+    color: var(--text-color) !important;
+    transition: all 0.3s ease;
+}
+#theme-toggle:hover {
+    background-color: var(--input-bg) !important;
+    color: var(--text-header) !important;
+}
+
+#tab-nav-bar {
+    border-bottom: 1px solid var(--glass-border) !important;
+    background-color: var(--input-bg) !important;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+#trip-summary-banner {
+    background-color: var(--glass-bg) !important;
+    border-bottom: 1px solid var(--glass-border) !important;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+#chat-form {
+    background-color: var(--input-bg) !important;
+    border-color: var(--glass-border) !important;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+#chat-input {
+    background-color: var(--input-bg) !important;
+    border-color: var(--input-border) !important;
+    color: var(--input-text) !important;
+    transition: all 0.3s ease;
+}
+
+.tab-btn {
+    color: var(--text-color) !important;
+    opacity: 0.6;
+    border-bottom: 2px solid transparent !important;
+    transition: all 0.2s ease;
+}
+.tab-btn:hover {
+    color: var(--text-header) !important;
+    opacity: 0.9;
+}
+.tab-btn.active {
+    color: var(--text-header) !important;
+    border-color: #6366f1 !important;
+    opacity: 1;
+}
+
+/* Map Styling */
+#map {
+    height: 480px;
+    z-index: 10;
+}
+
+/* Custom Animations */
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+@keyframes spin {
+    100% { transform: rotate(360deg); }
+}
+
+/* Tab Button Active states */
+.tab-btn.active {
+    color: #6366f1 !important;
+}
+.dark .tab-btn.active {
+    color: #818cf8 !important;
+}
+
+/* Markdown Rendering Styling */
+.markdown-body {
+    line-height: 1.7;
+    font-size: 0.975rem;
+    color: var(--text-color);
+}
+
+.markdown-body > *:last-child {
+    margin-bottom: 0 !important;
+}
+
+.markdown-body p {
+    margin-bottom: 1rem;
+}
+
+.markdown-body h1, 
+.markdown-body h2, 
+.markdown-body h3, 
+.markdown-body h4 {
+    color: var(--text-header);
+    font-weight: 700;
+    margin-top: 1.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.markdown-body h1 { font-size: 1.75rem; }
+.markdown-body h2 { font-size: 1.4rem; border-bottom: 1px solid var(--glass-border); padding-bottom: 0.25rem; }
+.markdown-body h3 { font-size: 1.2rem; }
+.markdown-body h4 { font-size: 1.05rem; }
+
+.markdown-body ul, 
+.markdown-body ol {
+    margin-bottom: 1.25rem;
+    padding-left: 1.5rem;
+}
+
+.markdown-body ul {
+    list-style-type: disc;
+}
+
+.markdown-body ol {
+    list-style-type: decimal;
+}
+
+.markdown-body li {
+    margin-bottom: 0.4rem;
+}
+
+.markdown-body strong {
+    color: var(--text-header);
+    font-weight: 600;
+}
+
+.markdown-body blockquote {
+    border-left: 4px solid #6366f1;
+    background: rgba(99, 102, 241, 0.05);
+    padding: 0.75rem 1.25rem;
+    margin: 1.25rem 0;
+    border-radius: 0 12px 12px 0;
+    font-style: italic;
+    color: #e2e8f0;
+}
+
+/* Custom Checklist Checkbox styles */
+input[type="checkbox"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.1rem;
+    height: 1.1rem;
+    margin-right: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--input-border) !important;
+    background-color: var(--input-bg) !important;
+    cursor: pointer;
+    vertical-align: middle;
+    position: relative;
+    outline: none;
+    transition: all 0.2s ease;
+    display: inline-block;
+}
+
+input[type="checkbox"]:checked {
+    background-color: #6366f1 !important;
+    border-color: #6366f1 !important;
+}
+
+input[type="checkbox"]:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+
+/* Responsive Table styling inside Markdown */
+.markdown-body table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.markdown-body th, 
+.markdown-body td {
+    padding: 0.75rem;
+    border: 1px solid var(--glass-border);
+}
+
+.markdown-body th {
+    background: var(--input-bg);
+    color: var(--text-header);
+    font-weight: 600;
+}
+
+.markdown-body td {
+    background: rgba(15, 23, 42, 0.05);
+}
+html.dark .markdown-body td {
+    background: rgba(15, 23, 42, 0.2);
+}
+
+.markdown-body hr {
+    border: 0;
+    border-top: 1px solid var(--glass-border);
+    margin: 1.75rem 0;
+}
+
+/* Custom Sidebar Trip Cards */
+.trip-card {
+    background: var(--glass-bg) !important;
+    border: 1px solid var(--glass-border) !important;
+    color: var(--text-color) !important;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    transition: all 0.2s ease;
+}
+.trip-card:hover {
+    border-color: rgba(99, 102, 241, 0.3) !important;
+}
+.trip-card.active {
+    background: rgba(99, 102, 241, 0.1) !important;
+    border-color: rgba(99, 102, 241, 0.4) !important;
+    color: #6366f1 !important;
+}
+html.light .trip-card.active {
+    color: #4f46e5 !important;
+}
+
+
+
+html.light header span.tracking-tight {
+    background: linear-gradient(to right, #0f172a, #475569);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* Hide bullets and align checkbox task list items */
+.markdown-body li.task-list-item,
+.markdown-body li:has(input[type="checkbox"]) {
+    list-style-type: none !important;
+    padding-left: 0;
+    margin-left: -1rem;
+}
+
+.btn-secondary {
+    background: var(--glass-bg) !important;
+    border-color: var(--glass-border) !important;
+    color: var(--text-color) !important;
+}
+.btn-secondary:hover {
+    background: rgba(99, 102, 241, 0.05) !important;
+    color: var(--text-header) !important;
+    border-color: rgba(99, 102, 241, 0.3) !important;
+}
+
+/* ==========================================
+   PRINT MEDIA STYLESHEET (PDF EXPORT)
+   ========================================== */
+@media print {
+    /* Hide navigation/sidebars/chats/buttons/forms */
+    header, 
+    #sidebar,
+    .tab-btn,
+    .btn-secondary,
+    button,
+    form,
+    #view-landing,
+    #view-wizard,
+    #view-loading,
+    #tab-chat,
+    .delete-item-btn,
+    .custom-item-form,
+    .expense-actions,
+    #expense-modal {
+        display: none !important;
+    }
+
+    /* Expand dashboard panels */
+    body {
+        background: #ffffff !important;
+        color: #000000 !important;
+        font-size: 11pt !important;
+    }
+
+    #view-dashboard {
+        display: block !important;
+        width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Print all tabs contents sequentially instead of tab panes */
+    .tab-pane {
+        display: block !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        margin-bottom: 2rem !important;
+        page-break-inside: avoid !important;
+    }
+
+    .glass-panel {
+        background: none !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin-bottom: 2rem !important;
+    }
+
+    /* Ensure text colors are black on white */
+    .text-slate-400,
+    .text-slate-300,
+    .text-slate-500,
+    .text-slate-700,
+    .dark\:text-slate-300 {
+        color: #333333 !important;
+    }
+
+    h1, h2, h3, h4, h5, h6,
+    .font-bold,
+    .font-extrabold {
+        color: #000000 !important;
+    }
+
+    #map {
+        page-break-inside: avoid !important;
+        max-height: 350px !important;
+    }
+}
+

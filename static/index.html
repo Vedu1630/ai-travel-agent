@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sojourn - AI Travel Agent & Trip Planner</title>
+    <meta name="description" content="Sojourn is a premium SaaS-grade AI travel planning application that designs personalized itineraries, budgets, and weather-aware checklists.">
+    
+    <!-- CDNs -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            100: '#e0e7ff',
+                            200: '#c7d2fe',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        },
+                        accent: {
+                            500: '#ec4899',
+                            600: '#db2777',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Stylesheets -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <link rel="stylesheet" href="style.css">
+    
+    <!-- Script Libraries -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="min-h-screen flex flex-col font-sans transition-colors duration-300">
+    
+    <!-- Header/Nav -->
+    <header class="backdrop-blur-md sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
+        <div class="flex items-center gap-3 cursor-pointer" onclick="app.switchView('landing')">
+            <span class="font-bold text-lg tracking-wider uppercase bg-gradient-to-r from-brand-500 to-accent-500 bg-clip-text text-transparent">AI Travel Agent</span>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <!-- Theme Toggle -->
+            <button id="theme-toggle" class="p-2.5 rounded-xl border transition-all">
+                <i data-lucide="sun" class="w-5 h-5 hidden dark:block"></i>
+                <i data-lucide="moon" class="w-5 h-5 block dark:hidden"></i>
+            </button>
+            
+            <button onclick="app.switchView('wizard')" class="bg-gradient-to-r from-brand-500 to-accent-500 hover:from-brand-600 hover:to-accent-600 text-white font-medium px-5 py-2.5 rounded-xl shadow-lg shadow-brand-500/20 hover:shadow-brand-500/30 transition-all flex items-center gap-2">
+                <i data-lucide="plus" class="w-4 h-4"></i>
+                <span>Plan a Trip</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="flex-1 flex overflow-hidden relative">
+        
+        <!-- SIDEBAR: Saved Trips -->
+        <aside id="sidebar" class="w-80 border-r flex flex-col hidden lg:flex">
+            <div class="p-4 border-b border-glass">
+                <h2 class="font-bold text-header flex items-center gap-2">
+                    <i data-lucide="folder-heart" class="w-4 h-4 text-brand-500"></i>
+                    <span>Saved Itineraries</span>
+                </h2>
+            </div>
+            
+            <div id="saved-trips-list" class="flex-1 overflow-y-auto p-4 space-y-3">
+                <!-- Dynamically populated -->
+                <div class="text-slate-500 text-center py-8 text-sm">
+                    No trips planned yet.
+                </div>
+            </div>
+        </aside>
+
+        <!-- VIEWPORT -->
+        <main class="flex-1 overflow-y-auto relative flex flex-col">
+            
+            <!-- 1. LANDING VIEW -->
+            <section id="view-landing" class="max-w-6xl mx-auto px-6 py-12 md:py-20 space-y-16 flex-1">
+                <div class="text-center space-y-6 max-w-3xl mx-auto">
+                    <div class="inline-flex items-center gap-2 bg-brand-500/10 border border-brand-500/20 px-3 py-1 rounded-full text-brand-400 text-xs font-semibold uppercase tracking-wider">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+                        <span>Generative Travel Planner</span>
+                    </div>
+                    
+                    <h1 class="text-5xl md:text-6xl font-extrabold tracking-tight leading-none text-header">
+                        Your Personalized AI <span class="bg-gradient-to-r from-brand-500 via-indigo-400 to-accent-500 bg-clip-text text-transparent">Travel Agent</span>
+                    </h1>
+                    
+                    <p class="text-slate-600 dark:text-slate-400 text-lg md:text-xl font-normal leading-relaxed">
+                        Sojourn curates bespoke itineraries, suggests optimal accommodations, maps attractions, and helps track expenses—all customized to your budget, travel dates, and interests.
+                    </p>
+                    
+                    <div class="flex flex-col sm:flex-row justify-center items-center gap-4 pt-4">
+                        <button onclick="app.switchView('wizard')" class="w-full sm:w-auto bg-gradient-to-r from-brand-500 to-accent-500 hover:from-brand-600 hover:to-accent-600 text-white text-lg font-semibold px-8 py-4 rounded-2xl shadow-xl shadow-brand-500/10 hover:shadow-brand-500/25 transition-all transform hover:-translate-y-0.5 flex items-center justify-center gap-2">
+                            <span>Get Started - It's Free</span>
+                            <i data-lucide="arrow-right" class="w-5 h-5"></i>
+                        </button>
+                        
+                        <button onclick="app.showDemo()" class="w-full sm:w-auto btn-secondary text-lg font-medium px-8 py-4 rounded-2xl transition-all">
+                            View Saved Trips
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Features Grid -->
+                <div class="grid md:grid-cols-3 gap-8 pt-8">
+                    <div class="glass-panel p-6 rounded-2xl space-y-4 hover:border-brand-500/20 transition-all duration-300">
+                        <div class="w-12 h-12 rounded-xl bg-brand-500/10 flex items-center justify-center text-brand-500">
+                            <i data-lucide="compass" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="font-bold text-xl text-header">Bespoke Day-by-Day Scheduling</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Generates highly detailed timelines including optimal breakfast, lunch, activities, dinner, and hotel bookings tailored to your pace.</p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl space-y-4 hover:border-accent-500/20 transition-all duration-300">
+                        <div class="w-12 h-12 rounded-xl bg-accent-500/10 flex items-center justify-center text-accent-500">
+                            <i data-lucide="wallet" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="font-bold text-xl text-header">Intelligent Budget & Expenses</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Breaks down projected costs and tracks actual spending with category-wise charts, plus split expense math for groups.</p>
+                    </div>
+
+                    <div class="glass-panel p-6 rounded-2xl space-y-4 hover:border-brand-500/20 transition-all duration-300">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-500">
+                            <i data-lucide="map-pin" class="w-6 h-6"></i>
+                        </div>
+                        <h3 class="font-bold text-xl text-header">Interactive Map Explorer</h3>
+                        <p class="text-slate-500 dark:text-slate-400 text-sm leading-relaxed">Visualizes hotels, recommended sights, and restaurants on a fully interactive map using free OpenStreetMap integrations.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. WIZARD VIEW -->
+            <section id="view-wizard" class="max-w-3xl mx-auto px-6 py-12 w-full hidden">
+                <div class="space-y-8">
+                    <div>
+                        <button onclick="app.switchView('landing')" class="text-slate-500 dark:text-slate-400 hover:text-header flex items-center gap-1.5 text-sm transition-all mb-4">
+                            <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                            <span>Back</span>
+                        </button>
+                        <h2 class="text-3xl font-extrabold text-header">Plan Your Next Sojourn</h2>
+                        <p class="text-slate-600 dark:text-slate-400 mt-1">Let our AI Travel Agent curate the ultimate experience for you.</p>
+                    </div>
+
+                    <form id="wizard-form" class="space-y-6 glass-panel p-8 rounded-2xl">
+                        <!-- Step 1: Destination -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label for="origin-input" class="text-sm font-semibold text-header block">Origin City</label>
+                                <input type="text" id="origin-input" placeholder="e.g. Mumbai, New York" required
+                                       class="w-full rounded-xl px-4 py-3 focus:outline-none transition-all">
+                            </div>
+                            <div class="space-y-2">
+                                <label for="destination-input" class="text-sm font-semibold text-header block">Where to?</label>
+                                <input type="text" id="destination-input" placeholder="e.g. Goa, Paris, Rajasthan" required
+                                       class="w-full rounded-xl px-4 py-3 focus:outline-none transition-all">
+                            </div>
+                        </div>
+
+                        <!-- Step 2: Dates -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="space-y-2">
+                                <label for="start-date-input" class="text-sm font-semibold text-header block">Start Date</label>
+                                <input type="date" id="start-date-input" required onclick="try { this.showPicker(); } catch(e) {}"
+                                       class="w-full rounded-xl px-4 py-3 focus:outline-none transition-all">
+                            </div>
+                            <div class="space-y-2">
+                                <label for="end-date-input" class="text-sm font-semibold text-header block">End Date</label>
+                                <input type="date" id="end-date-input" required onclick="try { this.showPicker(); } catch(e) {}"
+                                       class="w-full rounded-xl px-4 py-3 focus:outline-none transition-all">
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Travelers & Style -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div class="space-y-2">
+                                <label for="travelers-input" class="text-sm font-semibold text-header block">Travelers</label>
+                                <input type="number" id="travelers-input" min="1" value="1" required
+                                       class="w-full rounded-xl px-4 py-3 focus:outline-none transition-all">
+                            </div>
+                            <div class="space-y-2 col-span-2">
+                                <label for="style-input" class="text-sm font-semibold text-header block">Travel Style</label>
+                                <select id="style-input" required
+                                        class="w-full rounded-xl px-4 py-3 focus:outline-none transition-all">
+                                    <option value="budget">Budget (Wallet-friendly, local travel & stays)</option>
+                                    <option value="comfort" selected>Comfort (Mid-range hotels, balanced pace)</option>
+                                    <option value="luxury">Luxury (5-star resorts, private transfers, premium dining)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Step 4: Budget -->
+                        <div class="space-y-2">
+                            <label for="budget-input" class="text-sm font-semibold text-header block">Total Budget (INR)</label>
+                            <input type="number" id="budget-input" min="1000" placeholder="e.g. 35000" required
+                                   class="w-full rounded-xl px-4 py-3 focus:outline-none transition-all">
+                        </div>
+
+                        <!-- Step 5: Interests -->
+                        <div class="space-y-3">
+                            <label class="text-sm font-semibold text-header block">Interests (Select all that apply)</label>
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="beaches" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Beaches</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="nightlife" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Nightlife</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="adventure" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Adventure</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="food" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Food</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="history" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">History</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="nature" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Nature</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="shopping" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Shopping</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="photography" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Photography</span>
+                                </label>
+                                <label class="border border-glass bg-input rounded-xl p-3 flex items-center gap-2.5 cursor-pointer hover:border-brand-500/50 transition-all select-none">
+                                    <input type="checkbox" name="interest" value="wellness" class="rounded border-input text-brand-500 focus:ring-brand-500 bg-input">
+                                    <span class="text-sm">Wellness</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="w-full bg-gradient-to-r from-brand-500 to-accent-500 hover:from-brand-600 hover:to-accent-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-brand-500/10 transition-all flex items-center justify-center gap-2 mt-4">
+                            <i data-lucide="sparkles" class="w-5 h-5"></i>
+                            <span>Generate AI Itinerary</span>
+                        </button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- 3. LOADING VIEW -->
+            <section id="view-loading" class="flex-1 flex flex-col justify-center items-center p-6 hidden">
+                <div class="max-w-md text-center space-y-6">
+                    <div class="loader-container relative w-24 h-24 mx-auto">
+                        <div class="absolute inset-0 rounded-full border-4 border-glass"></div>
+                        <div class="absolute inset-0 rounded-full border-4 border-t-brand-500 border-r-accent-500 animate-spin"></div>
+                    </div>
+                    <div class="space-y-2">
+                        <h3 id="loader-title" class="text-2xl font-bold text-header">Consulting databases...</h3>
+                        <p id="loader-desc" class="text-slate-500 dark:text-slate-400 text-sm">Searching the web for current hotel prices and geo-locating coordinates.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. ACTIVE TRIP DASHBOARD -->
+            <section id="view-dashboard" class="flex-1 flex flex-col hidden">
+                <!-- Trip Summary Banner -->
+                <div id="trip-summary-banner" class="px-8 py-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div class="space-y-1.5">
+                        <div class="flex items-center gap-2.5">
+                            <h2 id="active-destination" class="text-3xl font-extrabold text-header">Goa Trip</h2>
+                            <span id="active-style" class="bg-brand-500/15 border border-brand-500/30 text-brand-400 text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">Comfort</span>
+                        </div>
+                        <p class="text-slate-600 dark:text-slate-400 text-sm flex flex-wrap items-center gap-4">
+                            <span class="flex items-center gap-1.5"><i data-lucide="plane-takeoff" class="w-4 h-4 text-slate-400 dark:text-slate-500"></i> <span id="active-route">Mumbai to Goa</span></span>
+                            <span class="flex items-center gap-1.5"><i data-lucide="calendar" class="w-4 h-4 text-slate-400 dark:text-slate-500"></i> <span id="active-dates">20-06 to 22-06</span></span>
+                            <span class="flex items-center gap-1.5"><i data-lucide="users" class="w-4 h-4 text-slate-400 dark:text-slate-500"></i> <span id="active-travelers">3 Travelers</span></span>
+                        </p>
+                    </div>
+                    
+                    <div class="flex items-center gap-3">
+                        <button onclick="window.print()" class="btn-secondary px-4 py-2.5 rounded-xl border transition-all text-sm flex items-center gap-2">
+                            <i data-lucide="printer" class="w-4 h-4"></i>
+                            <span>Export PDF</span>
+                        </button>
+                        <button onclick="app.deleteActiveTrip()" class="px-4 py-2.5 rounded-xl border border-rose-500/30 hover:border-rose-500/60 bg-rose-500/5 text-rose-400 hover:text-rose-300 transition-all text-sm flex items-center gap-2">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                            <span>Delete Trip</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Navigation Tabs -->
+                <div id="tab-nav-bar" class="px-8 flex gap-8 overflow-x-auto">
+                    <button onclick="app.switchTab('itinerary')" class="tab-btn active py-4 font-semibold transition-all flex items-center gap-2 shrink-0">
+                        <i data-lucide="milestone" class="w-4 h-4 text-brand-400"></i>
+                        <span>Itinerary</span>
+                    </button>
+                    <button onclick="app.switchTab('budget')" class="tab-btn py-4 font-semibold transition-all flex items-center gap-2 shrink-0">
+                        <i data-lucide="wallet" class="w-4 h-4 text-indigo-400"></i>
+                        <span>Budget & Expenses</span>
+                    </button>
+                    <button onclick="app.switchTab('map')" class="tab-btn py-4 font-semibold transition-all flex items-center gap-2 shrink-0">
+                        <i data-lucide="map" class="w-4 h-4 text-emerald-400"></i>
+                        <span>Map Explorer</span>
+                    </button>
+                    <button onclick="app.switchTab('weather')" class="tab-btn py-4 font-semibold transition-all flex items-center gap-2 shrink-0">
+                        <i data-lucide="cloud-lightning" class="w-4 h-4 text-sky-400"></i>
+                        <span>Weather & Packing</span>
+                    </button>
+                    <button onclick="app.switchTab('chat')" class="tab-btn py-4 font-semibold transition-all flex items-center gap-2 shrink-0">
+                        <i data-lucide="messages-square" class="w-4 h-4 text-purple-400"></i>
+                        <span>AI Assistant</span>
+                    </button>
+                </div>
+
+                <!-- TAB CONTENTS -->
+                <div class="flex-1 p-8 overflow-y-auto">
+                    
+                    <!-- Sub-tab 1: Itinerary -->
+                    <div id="tab-itinerary" class="tab-content grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2 space-y-6">
+                            <h3 class="font-bold text-2xl border-b border-glass pb-2 flex items-center gap-2 text-header"><i data-lucide="calendar-check" class="text-brand-500"></i> Daily Timeline</h3>
+                            <div id="itinerary-md-content" class="markdown-body">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                        <div class="space-y-6">
+                            <div class="glass-panel p-6 rounded-2xl space-y-4">
+                                <h4 class="font-bold text-lg text-brand-400 flex items-center gap-2"><i data-lucide="hotel" class="w-5 h-5"></i> Selected Hotel</h4>
+                                <div id="selected-hotel-md-content" class="markdown-body text-sm leading-relaxed">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                            
+                            <div class="glass-panel p-6 rounded-2xl space-y-4">
+                                <h4 class="font-bold text-lg text-emerald-400 flex items-center gap-2"><i data-lucide="compass" class="w-5 h-5"></i> Sights & Attractions</h4>
+                                <div id="attractions-md-content" class="markdown-body text-sm leading-relaxed h-64 overflow-y-auto pr-2">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sub-tab 2: Budget & Expenses -->
+                    <div id="tab-budget" class="tab-content hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="lg:col-span-2 space-y-6 glass-panel p-6 rounded-2xl">
+                            <div class="flex items-center justify-between border-b border-slate-200/50 dark:border-slate-800 pb-4">
+                                <h3 class="font-bold text-2xl flex items-center gap-2 text-header"><i data-lucide="receipt" class="text-indigo-400"></i> Expense Log</h3>
+                                <button onclick="app.showAddExpenseModal(true)" class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs px-4 py-2 rounded-xl transition-all flex items-center gap-1.5 shadow-lg shadow-indigo-600/15">
+                                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Add Expense
+                                </button>
+                            </div>
+                            
+                            <!-- Expense History Table -->
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-sm">
+                                    <thead class="text-slate-500 uppercase text-xs">
+                                        <tr>
+                                            <th class="py-3 px-2">Date</th>
+                                            <th class="py-3 px-2">Title</th>
+                                            <th class="py-3 px-2">Category</th>
+                                            <th class="py-3 px-2 text-right">Amount</th>
+                                            <th class="py-3 px-2 text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="expense-table-body" class="divide-y divide-slate-200/50 dark:divide-slate-800">
+                                        <!-- Dynamically populated -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <div class="space-y-6">
+                            <!-- Budget Stats Card -->
+                            <div class="glass-panel p-6 rounded-2xl space-y-5">
+                                <h4 class="font-bold text-lg border-b border-glass pb-2 flex items-center gap-2 text-header"><i data-lucide="pie-chart" class="text-indigo-400"></i> Spending Summary</h4>
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div class="space-y-0.5">
+                                        <span class="text-xs text-slate-500">Planned Budget</span>
+                                        <span id="budget-planned-val" class="font-extrabold text-xl block text-header">₹0</span>
+                                    </div>
+                                    <div class="space-y-0.5">
+                                        <span class="text-xs text-slate-500">Actual Spent</span>
+                                        <span id="budget-spent-val" class="font-extrabold text-xl text-brand-500 block">₹0</span>
+                                    </div>
+                                    <div class="space-y-0.5 col-span-2">
+                                        <span class="text-xs text-slate-500">Remaining Budget</span>
+                                        <span id="budget-rem-val" class="font-extrabold text-2xl block text-header">₹0</span>
+                                    </div>
+                                </div>
+                                
+                                <!-- Progress Bar -->
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-xs text-slate-400">
+                                        <span>Utilization</span>
+                                        <span id="budget-percent-text">0%</span>
+                                    </div>
+                                    <div class="w-full h-2.5 bg-slate-200 dark:bg-slate-950 rounded-full overflow-hidden">
+                                        <div id="budget-progress-bar" class="h-full bg-gradient-to-r from-brand-500 to-accent-500" style="width: 0%;"></div>
+                                    </div>
+                                </div>
+                             </div>
+                             
+                             <!-- Expense Categories Chart -->
+                             <div class="glass-panel p-6 rounded-2xl space-y-4">
+                                <h4 class="font-bold text-lg border-b border-glass pb-2 flex items-center gap-2 text-header"><i data-lucide="donut-chart" class="text-indigo-400"></i> Category Breakdown</h4>
+                                <div class="w-full aspect-square relative max-w-[200px] mx-auto">
+                                    <canvas id="category-chart"></canvas>
+                                </div>
+                             </div>
+ 
+                             <!-- Spending Timeline Chart -->
+                             <div class="glass-panel p-6 rounded-2xl space-y-4">
+                                <h4 class="font-bold text-lg border-b border-glass pb-2 flex items-center gap-2 text-header"><i data-lucide="line-chart" class="text-indigo-400"></i> Spending Timeline</h4>
+                                <div class="w-full h-[180px] relative">
+                                    <canvas id="timeline-chart"></canvas>
+                                </div>
+                             </div>
+                        </div>
+                    </div>
+ 
+                    <!-- Sub-tab 3: Map Explorer -->
+                    <div id="tab-map" class="tab-content hidden space-y-4">
+                        <div class="glass-panel p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 class="font-bold text-xl flex items-center gap-2 text-header"><i data-lucide="map-pin" class="text-emerald-400"></i> Interactive Map Explorer</h3>
+                                <p class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">Plotting your hotel coordinates, recommended restaurants, and top sightseeing spots.</p>
+                            </div>
+                            <div class="flex items-center gap-3">
+                                <span class="flex items-center gap-1.5 text-xs bg-brand-500/10 border border-brand-500/20 px-2.5 py-1 rounded-full"><span class="w-2.5 h-2.5 bg-brand-500 rounded-full"></span> Hotel</span>
+                                <span class="flex items-center gap-1.5 text-xs bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full"><span class="w-2.5 h-2.5 bg-emerald-500 rounded-full"></span> Sights</span>
+                                <span class="flex items-center gap-1.5 text-xs bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-full"><span class="w-2.5 h-2.5 bg-amber-500 rounded-full"></span> Food</span>
+                            </div>
+                        </div>
+                        <!-- Map Container -->
+                        <div id="map" class="w-full border border-glass rounded-2xl overflow-hidden shadow-inner"></div>
+                    </div>
+ 
+                    <!-- Sub-tab 4: Weather & Packing -->
+                    <div id="tab-weather" class="tab-content hidden grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div class="space-y-6">
+                            <!-- Weather Card -->
+                            <div class="glass-panel p-6 rounded-2xl space-y-4">
+                                <h3 class="font-bold text-xl flex items-center gap-2 text-header"><i data-lucide="cloud-sun" class="text-sky-400"></i> Weather forecast</h3>
+                                <div class="glass-panel p-4 rounded-xl flex items-center justify-between gap-4">
+                                    <div>
+                                        <span class="text-xs text-slate-500 block">Forecast Location</span>
+                                        <span id="weather-location-val" class="font-bold text-lg text-header">Goa, IN</span>
+                                    </div>
+                                    <div class="w-12 h-12 bg-sky-500/10 rounded-xl flex items-center justify-center text-sky-400">
+                                        <i data-lucide="cloud-rain" class="w-6 h-6"></i>
+                                    </div>
+                                </div>
+                                
+                                <div id="weather-list-val" class="space-y-3 divide-y divide-glass text-sm">
+                                    <!-- Weather list -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="lg:col-span-2 space-y-6 glass-panel p-6 rounded-2xl">
+                            <h3 class="font-bold text-xl border-b border-glass pb-2 flex items-center gap-2 text-header"><i data-lucide="check-square" class="text-sky-400"></i> Packing Checklist</h3>
+                            <div id="packing-md-content" class="markdown-body pl-2">
+                                <!-- Packing list generated by LLM -->
+                            </div>
+                        </div>
+                    </div>
+ 
+                    <!-- Sub-tab 5: Chat Assistant -->
+                    <div id="tab-chat" class="tab-content hidden flex flex-col glass-panel rounded-2xl h-[550px] overflow-hidden">
+                        <!-- Chat Header -->
+                        <div class="px-6 py-4 border-b border-glass bg-input flex items-center gap-3">
+                            <div class="w-9 h-9 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400">
+                                <i data-lucide="bot" class="w-5 h-5"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-sm text-header">AI Assistant</h4>
+                                <span class="text-xs text-slate-500 block">Say: "add beach activities" or "reduce budget by 15%"</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Chat Message Area -->
+                        <div id="chat-messages" class="flex-1 overflow-y-auto p-6 space-y-4">
+                            <!-- Welcome -->
+                            <div class="flex items-start gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-purple-500/10 shrink-0 flex items-center justify-center text-purple-400 text-sm">
+                                    A
+                                </div>
+                                <div class="glass-panel px-4 py-3 rounded-2xl rounded-tl-none max-w-[80%] text-sm leading-relaxed">
+                                    Hello! I'm your AI Travel Assistant. I have the entire saved itinerary, budget limits, and hotels in context. You can ask me to:
+                                    <ul class="list-disc pl-4 mt-2 space-y-1 text-slate-500 dark:text-slate-400">
+                                        <li>"Reduce the overall budget by 10%"</li>
+                                        <li>"Suggest restaurant options for vegans in Goa"</li>
+                                        <li>"Replan Day 2 to add adventure sports"</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Chat Input Form -->
+                        <form id="chat-form" class="border-t border-glass p-4 bg-input flex items-center gap-3">
+                            <input type="text" id="chat-input" placeholder="Type a message to your travel agent..." required
+                                   class="flex-1 bg-input border border-input text-input rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-500 transition-all">
+                            <button type="submit" class="bg-gradient-to-r from-brand-500 to-accent-500 text-white font-bold p-3 rounded-xl hover:from-brand-600 hover:to-accent-600 shadow-md shadow-brand-500/15 transition-all shrink-0">
+                                <i data-lucide="send" class="w-4 h-4"></i>
+                            </button>
+                        </form>
+                    </div>
+
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- MODAL: Add/Edit Expense -->
+    <div id="expense-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 hidden">
+        <div class="glass-panel w-full max-w-md p-6 space-y-6 shadow-2xl rounded-2xl">
+            <div class="flex items-center justify-between border-b border-glass pb-3">
+                <h4 id="expense-modal-title" class="font-bold text-lg flex items-center gap-2 text-header"><i data-lucide="receipt" class="text-indigo-400"></i> Add Expense</h4>
+                <button onclick="app.showAddExpenseModal(false)" class="text-slate-500 dark:text-slate-400 hover:text-header"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <form id="expense-form" class="space-y-4">
+                <div class="space-y-1.5">
+                    <label for="expense-title" class="text-xs text-slate-500 uppercase font-semibold">Title</label>
+                    <input type="text" id="expense-title" placeholder="e.g. Flight Tickets, Dinner" required
+                           class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all">
+                </div>
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-1.5">
+                        <label for="expense-amount" class="text-xs text-slate-500 uppercase font-semibold">Amount (INR)</label>
+                        <input type="number" id="expense-amount" placeholder="5000" min="1" required
+                               class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all">
+                    </div>
+                    <div class="space-y-1.5">
+                        <label for="expense-date" class="text-xs text-slate-500 uppercase font-semibold">Date</label>
+                        <input type="date" id="expense-date" required onclick="try { this.showPicker(); } catch(e) {}"
+                               class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all">
+                    </div>
+                </div>
+                
+                <div class="space-y-1.5">
+                    <label for="expense-category" class="text-xs text-slate-500 uppercase font-semibold">Category</label>
+                    <select id="expense-category" required
+                            class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all">
+                        <option value="transport" selected>Transportation</option>
+                        <option value="accommodation">Accommodation</option>
+                        <option value="food">Food & Beverage</option>
+                        <option value="activities">Activities & Sights</option>
+                        <option value="local_transport">Local Commute</option>
+                        <option value="misc">Miscellaneous</option>
+                    </select>
+                </div>
+                
+                <button type="submit" id="expense-submit-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-600/10">
+                    Submit Expense
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Edit/Add Timeline Item -->
+    <div id="timeline-modal" class="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 hidden">
+        <div class="glass-panel w-full max-w-md p-6 space-y-6 shadow-2xl rounded-2xl">
+            <div class="flex items-center justify-between border-b border-glass pb-3">
+                <h4 id="timeline-modal-title" class="font-bold text-lg flex items-center gap-2 text-header"><i data-lucide="calendar" class="text-indigo-400"></i> Edit Activity</h4>
+                <button onclick="app.showTimelineModal(false)" class="text-slate-500 dark:text-slate-400 hover:text-header"><i data-lucide="x" class="w-5 h-5"></i></button>
+            </div>
+            
+            <form id="timeline-form" class="space-y-4">
+                <div class="space-y-1.5">
+                    <label for="timeline-item-text" class="text-xs text-slate-500 uppercase font-semibold">Activity Description</label>
+                    <input type="text" id="timeline-item-text" placeholder="e.g. Visit Baga Beach (approx. ₹300)" required
+                           class="w-full rounded-xl px-3.5 py-2.5 text-sm focus:outline-none transition-all">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-all shadow-lg shadow-indigo-600/10">
+                    Save Activity
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>

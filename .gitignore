@@ -1,0 +1,9 @@
+venv/
+__pycache__/
+*.pyc
+travel_planner.db
+.env
+.system_generated/
+*.log
+bing_search_result.html
+patch_response.html
