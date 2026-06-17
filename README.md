@@ -1,6 +1,6 @@
 <div align="center">
 
-# ✈️ Sojourn — AI Travel Agent & Trip Planner
+# ✈️ AI Travel Agent & Trip Planner
 
 **A full-stack generative AI application that designs personalized day-by-day travel itineraries, tracks expenses, maps locations, and curates weather-aware packing lists — all in one place.**
 
