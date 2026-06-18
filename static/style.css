@@ -433,3 +433,52 @@ html.light header span.tracking-tight {
     }
 }
 
+/* SaaS Platform Polish Styles */
+.glass-panel {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.glass-panel:hover {
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.5) !important;
+}
+html.light .glass-panel:hover {
+    border-color: rgba(15, 23, 42, 0.12) !important;
+    box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Skeletons */
+.skeleton {
+    background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: 8px;
+}
+html.light .skeleton {
+    background: linear-gradient(90deg, rgba(0,0,0,0.03) 25%, rgba(0,0,0,0.06) 50%, rgba(0,0,0,0.03) 75%);
+}
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Line clamping for stories description */
+.line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+/* Custom visual badges */
+.badge-indigo {
+    background: rgba(99, 102, 241, 0.1);
+    color: #818cf8;
+}
+.dark .badge-indigo {
+    color: #818cf8;
+}
+html.light .badge-indigo {
+    background: rgba(99, 102, 241, 0.08);
+    color: #4f46e5;
+}
+

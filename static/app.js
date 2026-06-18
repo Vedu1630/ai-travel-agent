@@ -11,7 +11,11 @@ document.addEventListener('DOMContentLoaded', () => {
         mapInstance: null,
         chartInstance: null,
         timelineChartInstance: null,
-        editingExpenseId: null
+        editingExpenseId: null,
+        simulatedFlights: null,
+        simulatedLodging: null,
+        userEmail: 'you',
+        userName: 'Traveler Genius'
     };
 
     // DOM Elements
@@ -27,7 +31,12 @@ document.addEventListener('DOMContentLoaded', () => {
         budget: document.getElementById('tab-budget'),
         map: document.getElementById('tab-map'),
         weather: document.getElementById('tab-weather'),
-        chat: document.getElementById('tab-chat')
+        chat: document.getElementById('tab-chat'),
+        flights: document.getElementById('tab-flights'),
+        lodging: document.getElementById('tab-lodging'),
+        community: document.getElementById('tab-community'),
+        profile: document.getElementById('tab-profile'),
+        admin: document.getElementById('tab-admin')
     };
 
     const savedTripsList = document.getElementById('saved-trips-list');
@@ -61,6 +70,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         switchTab(tabName) {
             console.log("Switching tab to:", tabName);
+            if (tabName === 'admin' && state.userEmail !== 'admin@tripgenius.ai') {
+                console.log("Access to admin tab denied");
+                return;
+            }
             Object.keys(tabs).forEach(key => {
                 if (tabs[key]) {
                     if (key === tabName) {
@@ -96,6 +109,16 @@ document.addEventListener('DOMContentLoaded', () => {
                         state.mapInstance.invalidateSize();
                     }
                 }, 100);
+            } else if (tabName === 'flights') {
+                this.renderFlights();
+            } else if (tabName === 'lodging') {
+                this.renderLodging();
+            } else if (tabName === 'community') {
+                this.renderStories();
+            } else if (tabName === 'profile') {
+                this.renderProfile();
+            } else if (tabName === 'admin') {
+                this.renderAdmin();
             }
         },
 
@@ -170,6 +193,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     state.mapInstance.remove();
                     state.mapInstance = null;
                 }
+
+                state.simulatedFlights = null;
+                state.simulatedLodging = null;
 
                 // Switch to active tab or default to itinerary
                 this.switchTab('itinerary');
@@ -474,14 +500,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Safe title string escape
                 const escapedTitle = exp.title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 
+                // Show split indicator if split with group
+                const splitBadge = exp.split_details === 'equal' 
+                    ? `<span class="ml-1.5 text-[8px] bg-teal-500/10 text-teal-400 px-1 py-0.5 rounded font-extrabold uppercase">Split</span>` 
+                    : '';
+                
                 tr.innerHTML = `
                     <td class="py-3 px-2 text-xs">${exp.date}</td>
-                    <td class="py-3 px-2 font-medium text-[var(--text-header)]">${exp.title}</td>
+                    <td class="py-3 px-2 font-medium text-[var(--text-header)] flex items-center">${exp.title}${splitBadge}</td>
                     <td class="py-3 px-2"><span class="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-[var(--input-bg)] border border-[var(--glass-border)] text-slate-600 dark:text-slate-400">${exp.category.replace('_', ' ')}</span></td>
                     <td class="py-3 px-2 text-right font-semibold text-[var(--text-header)]">₹${exp.amount.toLocaleString()}</td>
                     <td class="py-3 px-2 text-center">
                         <div class="flex items-center justify-center gap-1">
-                            <button onclick="app.showEditExpenseModal(${exp.id}, '${escapedTitle}', ${exp.amount}, '${exp.category}', '${exp.date}')" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 p-1">
+                            <button onclick="app.showEditExpenseModal(${exp.id}, '${escapedTitle}', ${exp.amount}, '${exp.category}', '${exp.date}', '${exp.paid_by || 'you'}', '${exp.split_details || 'none'}')" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 dark:hover:text-indigo-300 p-1">
                                 <i data-lucide="pencil" class="w-3.5 h-3.5"></i>
                             </button>
                             <button onclick="app.deleteExpense(${exp.id})" class="text-rose-600 dark:text-rose-400 hover:text-rose-500 dark:hover:text-rose-300 p-1">
@@ -501,6 +532,68 @@ document.addEventListener('DOMContentLoaded', () => {
                         </td>
                     </tr>
                 `;
+            }
+
+            // Calculate Group Split Balances
+            const splitsPanel = document.getElementById('group-splits-panel');
+            const splitsList = document.getElementById('group-splits-list');
+            
+            if (state.activeTrip.collaborators && state.activeTrip.collaborators.length > 0) {
+                splitsPanel.classList.remove('hidden');
+                
+                const currentUserEmail = state.userEmail || 'you';
+                const members = [currentUserEmail, ...state.activeTrip.collaborators.map(c => c.email)];
+                const M = members.length;
+                
+                const balances = {};
+                members.forEach(m => balances[m] = 0);
+                
+                expenses.forEach(exp => {
+                    if (exp.split_details === 'equal') {
+                        let payer = exp.paid_by || currentUserEmail;
+                        if (payer === 'you') payer = currentUserEmail;
+                        
+                        const amount = exp.amount;
+                        const share = amount / M;
+                        
+                        if (balances[payer] !== undefined) {
+                            balances[payer] += amount * (1 - 1/M);
+                        }
+                        members.forEach(m => {
+                            if (m !== payer && balances[m] !== undefined) {
+                                balances[m] -= share;
+                            }
+                        });
+                    }
+                });
+                
+                splitsList.innerHTML = '';
+                members.forEach(m => {
+                    const bal = balances[m];
+                    const item = document.createElement('div');
+                    item.className = 'flex items-center justify-between py-1.5 border-b border-[var(--glass-border)] last:border-0';
+                    
+                    let textClass = 'text-slate-400';
+                    let label = m === currentUserEmail ? 'You' : m;
+                    let prefix = '';
+                    if (bal > 0.01) {
+                        textClass = 'text-emerald-500 font-bold';
+                        prefix = 'owes you: +';
+                    } else if (bal < -0.01) {
+                        textClass = 'text-rose-500 font-bold';
+                        prefix = 'you owe: ';
+                    } else {
+                        prefix = 'Settled';
+                    }
+                    
+                    item.innerHTML = `
+                        <span class="truncate max-w-[200px]">${label}</span>
+                        <span class="${textClass}">${bal !== 0 ? prefix + '₹' + Math.abs(Math.round(bal)).toLocaleString() : 'Settled'}</span>
+                    `;
+                    splitsList.appendChild(item);
+                });
+            } else {
+                splitsPanel.classList.add('hidden');
             }
 
             lucide.createIcons();
@@ -679,18 +772,36 @@ document.addEventListener('DOMContentLoaded', () => {
         },
 
         initMap() {
-            const lat = state.activeTrip.latitude || 15.3;
-            const lon = state.activeTrip.longitude || 74.0;
+            if (!state.activeTrip) return;
+            
+            // Ensure simulated lodgings are initialized
+            this.initLodgingsData();
+
+            // Find selected hotel if any
+            const bookedHotel = state.simulatedLodging.find(l => l.selected);
+            
+            // Centering coordinate: use booked hotel coords if selected, otherwise fallback to destination coords
+            const lat = bookedHotel ? bookedHotel.latitude : (state.activeTrip.latitude || 15.3);
+            const lon = bookedHotel ? bookedHotel.longitude : (state.activeTrip.longitude || 74.0);
+            
             console.log("Initializing map at:", lat, lon);
 
-            state.mapInstance = L.map('map').setView([lat, lon], 12);
+            state.mapInstance = L.map('map').setView([lat, lon], 13);
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors'
             }).addTo(state.mapInstance);
 
-            // Hotel Icon (Custom red marker)
-            const hotelIcon = L.divIcon({
-                html: '<div class="w-8 h-8 rounded-full bg-brand-500 border-2 border-white flex items-center justify-center text-white shadow-lg"><i data-lucide="hotel" class="w-4 h-4"></i></div>',
+            // Hotel Icon Selected (Custom red marker)
+            const hotelIconSelected = L.divIcon({
+                html: '<div class="w-8 h-8 rounded-full bg-rose-600 border-2 border-white flex items-center justify-center text-white shadow-lg"><i data-lucide="hotel" class="w-4 h-4"></i></div>',
+                className: 'custom-div-icon',
+                iconSize: [32, 32],
+                iconAnchor: [16, 16]
+            });
+
+            // Hotel Icon Unselected (Custom slate/gray marker)
+            const hotelIconUnselected = L.divIcon({
+                html: '<div class="w-8 h-8 rounded-full bg-slate-500 border-2 border-white flex items-center justify-center text-white shadow-lg"><i data-lucide="hotel" class="w-4 h-4"></i></div>',
                 className: 'custom-div-icon',
                 iconSize: [32, 32],
                 iconAnchor: [16, 16]
@@ -712,18 +823,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 iconAnchor: [16, 16]
             });
 
-            // 1. Hotel Marker
-            const hotelNameMatch = state.activeTrip.selected_hotel.match(/Hotel Name:\s*(.*)/i);
-            const hotelName = hotelNameMatch ? hotelNameMatch[1] : "Your Hotel";
-            L.marker([lat, lon], { icon: hotelIcon })
-                .addTo(state.mapInstance)
-                .bindPopup(`<b>${hotelName}</b><br>Your selected accommodation.`)
-                .openPopup();
+            // 1. Plot all hotel markers from the simulated list
+            state.simulatedLodging.forEach(stay => {
+                const isSelected = stay.selected;
+                const icon = isSelected ? hotelIconSelected : hotelIconUnselected;
+                const btnLabel = isSelected ? 'Remove stay' : 'Book stay';
+                const btnClass = isSelected ? 'bg-rose-600 hover:bg-rose-700' : 'bg-blue-600 hover:bg-blue-700';
+                
+                L.marker([stay.latitude, stay.longitude], { icon: icon })
+                    .addTo(state.mapInstance)
+                    .bindPopup(`
+                        <div class="p-1 space-y-1 text-slate-800">
+                            <span class="font-bold text-xs block">${stay.name}</span>
+                            <span class="text-[10px] text-slate-500 block">${stay.category.toUpperCase()} • Rating: ⭐ ${stay.rating}/5</span>
+                            <span class="text-[10px] font-bold block">₹${stay.pricePerNight.toLocaleString()} / night</span>
+                            <button onclick="app.bookLodgingFromMap(${stay.id})" class="mt-1.5 px-2 py-1 ${btnClass} text-white font-bold text-[9px] rounded transition-all w-full text-center">${btnLabel}</button>
+                        </div>
+                    `);
+            });
 
             // 2. Plot mock attractions slightly offset to look realistic without hitting api limits
             const attractionLines = (state.activeTrip.attractions || "").split('\n');
             let offsetIndex = 1;
-            const routeCoordinates = [[lat, lon]]; // Start at hotel
+            const routeCoordinates = [[lat, lon]]; // Start at the active hotel center
             
             attractionLines.forEach(line => {
                 if (line.trim().startsWith('- ')) {
@@ -777,6 +899,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('expense-modal-title').innerHTML = `<i data-lucide="receipt" class="text-indigo-400"></i> Add Expense`;
                 document.getElementById('expense-submit-btn').innerText = "Submit Expense";
                 document.getElementById('expense-date').value = new Date().toISOString().split('T')[0];
+                
+                // Populate paid by dropdown
+                const paidBySelect = document.getElementById('expense-paid-by');
+                paidBySelect.innerHTML = '<option value="you" selected>You</option>';
+                if (state.activeTrip && state.activeTrip.collaborators) {
+                    state.activeTrip.collaborators.forEach(c => {
+                        paidBySelect.innerHTML += `<option value="${c.email}">${c.email}</option>`;
+                    });
+                }
+                
+                document.getElementById('expense-split-type').value = "none";
+                
                 modal.classList.remove('hidden');
                 lucide.createIcons();
             } else {
@@ -785,7 +919,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
-        showEditExpenseModal(id, title, amount, category, date) {
+        showEditExpenseModal(id, title, amount, category, date, paidBy = 'you', splitType = 'none') {
             state.editingExpenseId = id;
             document.getElementById('expense-modal-title').innerHTML = `<i data-lucide="receipt" class="text-indigo-400"></i> Edit Expense`;
             document.getElementById('expense-submit-btn').innerText = "Save Changes";
@@ -794,6 +928,17 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('expense-amount').value = amount;
             document.getElementById('expense-category').value = category;
             document.getElementById('expense-date').value = date;
+            
+            // Populate paid by dropdown
+            const paidBySelect = document.getElementById('expense-paid-by');
+            paidBySelect.innerHTML = '<option value="you">You</option>';
+            if (state.activeTrip && state.activeTrip.collaborators) {
+                state.activeTrip.collaborators.forEach(c => {
+                    paidBySelect.innerHTML += `<option value="${c.email}">${c.email}</option>`;
+                });
+            }
+            paidBySelect.value = paidBy || 'you';
+            document.getElementById('expense-split-type').value = splitType || 'none';
             
             document.getElementById('expense-modal').classList.remove('hidden');
             lucide.createIcons();
@@ -805,6 +950,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const amount = parseFloat(document.getElementById('expense-amount').value);
             const date = document.getElementById('expense-date').value;
             const category = document.getElementById('expense-category').value;
+            const paid_by = document.getElementById('expense-paid-by').value;
+            const split_details = document.getElementById('expense-split-type').value;
 
             try {
                 let response;
@@ -812,13 +959,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     response = await fetch(`/api/expenses/${state.editingExpenseId}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title, amount, category, date })
+                        body: JSON.stringify({ title, amount, category, date, paid_by, split_details })
                     });
                 } else {
                     response = await fetch(`/api/trips/${state.activeTrip.id}/expenses`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ title, amount, category, date })
+                        body: JSON.stringify({ title, amount, category, date, paid_by, split_details })
                     });
                 }
 
@@ -1124,12 +1271,1057 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         },
 
+        renderFlights() {
+            const container = document.getElementById('flights-list-container');
+            container.innerHTML = '';
+            
+            if (!state.activeTrip) {
+                container.innerHTML = `
+                    <div class="col-span-full glass-panel p-8 text-center text-slate-500 rounded-2xl">
+                        Please select or plan a trip first to search for flights matching your itinerary.
+                    </div>
+                `;
+                return;
+            }
+            
+            const origin = state.activeTrip.origin || 'Mumbai';
+            const destination = state.activeTrip.destination || 'Goa';
+            const travelers = state.activeTrip.travelers || 1;
+            const style = state.activeTrip.style || 'comfort';
+            
+            if (!state.simulatedFlights) {
+                const airlines = [
+                    { name: 'IndiGo', code: '6E', icon: 'plane' },
+                    { name: 'Air India', code: 'AI', icon: 'plane' },
+                    { name: 'Vistara', code: 'UK', icon: 'plane' },
+                    { name: 'Akasa Air', code: 'QP', icon: 'plane' },
+                    { name: 'SpiceJet', code: 'SG', icon: 'plane' }
+                ];
+                
+                const list = [];
+                for (let i = 0; i < 20; i++) {
+                    const airline = airlines[i % airlines.length];
+                    const stops = i % 3 === 0 ? 0 : (i % 3 === 1 ? 1 : 2);
+                    
+                    let basePrice = 4000;
+                    if (style === 'luxury') basePrice = 8500 + (i * 300);
+                    else if (style === 'budget') basePrice = 2800 + (i * 120);
+                    else basePrice = 4000 + (i * 180);
+                    
+                    const pricePerPerson = Math.round(basePrice + (Math.random() * 1500) - (stops * 300));
+                    const totalCost = pricePerPerson * travelers;
+                    
+                    let duration = '2h 10m';
+                    if (stops === 1) duration = i % 2 === 0 ? '5h 45m' : '4h 30m';
+                    else if (stops === 2) duration = i % 2 === 0 ? '8h 20m' : '9h 50m';
+                    else duration = i % 2 === 0 ? '2h 10m' : '1h 50m';
+                    
+                    const hourDep = Math.floor(5 + (i * 0.9)) % 24;
+                    const minDep = (i * 15) % 60;
+                    const depTime = `${String(hourDep).padStart(2, '0')}:${String(minDep).padStart(2, '0')}`;
+                    
+                    const durationHrs = stops === 0 ? 2 : (stops === 1 ? 5 : 9);
+                    const durationMins = stops === 0 ? 10 : (stops === 1 ? 45 : 30);
+                    let hourArr = (hourDep + durationHrs) % 24;
+                    let minArr = (minDep + durationMins) % 60;
+                    const arrTime = `${String(hourArr).padStart(2, '0')}:${String(minArr).padStart(2, '0')}`;
+                    
+                    const valueScore = Math.max(1, Math.min(10, Math.round(10 - (pricePerPerson / 1800) - (stops * 1.5))));
+                    
+                    list.push({
+                        id: i + 1,
+                        airline: airline.name,
+                        code: `${airline.code}-${100 + i * 41}`,
+                        stops: stops,
+                        duration: duration,
+                        depTime: depTime,
+                        arrTime: arrTime,
+                        pricePerPerson: pricePerPerson,
+                        totalCost: totalCost,
+                        valueScore: valueScore,
+                        selected: false
+                    });
+                }
+                state.simulatedFlights = list;
+            }
+            
+            const filterStops = document.getElementById('flight-filter-stops').value;
+            const filterSort = document.getElementById('flight-filter-sort').value;
+            
+            let filtered = [...state.simulatedFlights];
+            
+            if (filterStops !== 'all') {
+                const maxStops = parseInt(filterStops);
+                filtered = filtered.filter(f => f.stops <= maxStops);
+            }
+            
+            if (filterSort === 'price') {
+                filtered.sort((a, b) => a.totalCost - b.totalCost);
+            } else if (filterSort === 'duration') {
+                filtered.sort((a, b) => {
+                    const aMinutes = a.stops === 0 ? 130 : (a.stops === 1 ? 345 : 500);
+                    const bMinutes = b.stops === 0 ? 130 : (b.stops === 1 ? 345 : 500);
+                    return aMinutes - bMinutes;
+                });
+            } else if (filterSort === 'value') {
+                filtered.sort((a, b) => b.valueScore - a.valueScore);
+            }
+            
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-full glass-panel p-8 text-center text-slate-500 rounded-2xl">
+                        No flights found matching the filters.
+                    </div>
+                `;
+                return;
+            }
+            
+            filtered.forEach(flight => {
+                const card = document.createElement('div');
+                card.className = `glass-panel p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-blue-500/30 transition-all duration-300 ${flight.selected ? 'border-blue-500/50 bg-blue-500/5' : ''}`;
+                
+                let stopsLabel = flight.stops === 0 ? 'Non-stop' : `${flight.stops} Stop${flight.stops > 1 ? 's' : ''}`;
+                let badgeHTML = '';
+                if (flight.valueScore >= 8) {
+                    badgeHTML = `<span class="bg-blue-500/10 text-blue-500 dark:text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full">Best Value</span>`;
+                } else if (flight.pricePerPerson < 4500) {
+                    badgeHTML = `<span class="bg-emerald-500/10 text-emerald-500 dark:text-emerald-400 text-[10px] font-bold px-2 py-0.5 rounded-full">Cheapest</span>`;
+                }
+                
+                card.innerHTML = `
+                    <div class="flex items-center justify-between border-b border-glass pb-3">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-500">
+                                <i data-lucide="plane" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <span class="font-bold text-sm text-header block text-[var(--text-header)]">${flight.airline}</span>
+                                <span class="text-[10px] text-slate-500 block">${flight.code}</span>
+                            </div>
+                        </div>
+                        ${badgeHTML}
+                    </div>
+                    
+                    <div class="flex items-center justify-between text-center py-2">
+                        <div class="text-left">
+                            <span class="font-extrabold text-lg text-[var(--text-header)] block">${flight.depTime}</span>
+                            <span class="text-[10px] text-slate-500 block uppercase font-bold">${origin.split(',')[0]}</span>
+                        </div>
+                        <div class="flex-1 px-4 relative flex flex-col items-center">
+                            <span class="text-[10px] text-slate-400 block">${flight.duration}</span>
+                            <div class="w-full h-[1px] bg-slate-300 dark:bg-slate-700 my-1 relative">
+                                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-slate-400"></div>
+                            </div>
+                            <span class="text-[10px] font-semibold text-slate-500 block">${stopsLabel}</span>
+                        </div>
+                        <div class="text-right">
+                            <span class="font-extrabold text-lg text-[var(--text-header)] block">${flight.arrTime}</span>
+                            <span class="text-[10px] text-slate-500 block uppercase font-bold">${destination.split(',')[0]}</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between border-t border-glass pt-3 mt-2">
+                        <div>
+                            <span class="text-[10px] text-slate-500 block">Total for ${travelers} pax</span>
+                            <span class="font-extrabold text-lg text-[var(--text-header)] block">₹${flight.totalCost.toLocaleString()}</span>
+                            <span class="text-[9px] text-slate-400 block">₹${flight.pricePerPerson.toLocaleString()} / person</span>
+                        </div>
+                        <div class="flex gap-1.5">
+                            <button onclick="app.showBookingModal('flight', ${flight.id})" class="px-3 py-1.5 ${flight.selected ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/30' : 'bg-blue-600 hover:bg-blue-700 text-white'} font-bold text-[10px] rounded-lg transition-all shadow-md shrink-0 flex items-center gap-1">
+                                <i data-lucide="${flight.selected ? 'check-circle' : 'shopping-bag'}" class="w-3 h-3"></i>
+                                ${flight.selected ? 'Booked (Options)' : 'Book / Redirect'}
+                            </button>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            lucide.createIcons();
+        },
+        
+        filterFlights() {
+            this.renderFlights();
+        },
+        
+        async bookFlight(flightId) {
+            if (!state.activeTrip) return;
+            const flight = state.simulatedFlights.find(f => f.id === flightId);
+            if (!flight) return;
+            
+            flight.selected = !flight.selected;
+            
+            if (flight.selected) {
+                const title = `Flight: ${flight.airline} (${flight.code})`;
+                const amount = flight.totalCost;
+                const date = state.activeTrip.start_date;
+                const category = 'transport';
+                
+                try {
+                    const response = await fetch(`/api/trips/${state.activeTrip.id}/expenses`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title, amount, category, date, paid_by: 'you', split_details: 'none' })
+                    });
+                    if (response.ok) {
+                        alert(`Successfully added flight ticket cost (₹${amount.toLocaleString()}) to Expense Log!`);
+                        await this.refreshActiveTripDetails();
+                    }
+                } catch (e) {
+                    console.error("Error logging flight booking expense:", e);
+                }
+            }
+            this.renderFlights();
+        },
+        
+        redirectFlight(flightId) {
+            if (!state.activeTrip) return;
+            const flight = state.simulatedFlights.find(f => f.id === flightId);
+            if (!flight) return;
+            
+            const origin = state.activeTrip.origin || 'Mumbai';
+            const destination = state.activeTrip.destination || 'Goa';
+            const date = state.activeTrip.start_date || '';
+            
+            const getIataOrName = (str) => {
+                const match = str.match(/\((.*?)\)/);
+                return match ? match[1].trim() : str.trim();
+            };
+
+            const queryStr = `Flights from ${getIataOrName(origin)} to ${getIataOrName(destination)} on ${date} with ${flight.airline}`;
+            const bookingUrl = `https://www.google.com/travel/flights?q=${encodeURIComponent(queryStr)}`;
+            
+            window.open(bookingUrl, '_blank');
+        },
+
+        initLodgingsData() {
+            if (!state.activeTrip) return;
+            if (state.simulatedLodging) return;
+
+            const destination = state.activeTrip.destination || 'Goa';
+            const days = state.activeTrip.days || 3;
+            const baseLat = state.activeTrip.latitude || 15.3;
+            const baseLon = state.activeTrip.longitude || 74.0;
+            
+            const baseLodgings = [
+                { name: 'Heritage Resort & Spa', category: 'resort', price: 9500, rating: 4.8, distance: '1.5 km', amenities: ['Pool', 'Spa', 'Beach Access', 'Free Breakfast', 'Wi-Fi'], img: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Urban Center Hotel', category: 'hotel', price: 4200, rating: 4.5, distance: '0.4 km', amenities: ['Gym', 'Wi-Fi', 'Restaurant', 'Bar'], img: 'https://images.unsplash.com/photo-1540541338287-41700207dee6?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Backpackers Paradise Hostel', category: 'hostel', price: 950, rating: 4.3, distance: '2.1 km', amenities: ['Shared Kitchen', 'Social Lounge', 'Wi-Fi', 'Bicycle Rental'], img: 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Vista Hermosa Villa', category: 'villa', price: 14000, rating: 4.9, distance: '4.8 km', amenities: ['Private Pool', 'Kitchen', 'Garden', 'Wi-Fi', 'Parking'], img: 'https://images.unsplash.com/photo-1613977257363-707ba9348227?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Seaside Boutique Hotel', category: 'hotel', price: 6800, rating: 4.6, distance: '0.1 km', amenities: ['Ocean View', 'Restaurant', 'Wi-Fi', 'Free Breakfast'], img: 'https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Riverside Eco-Resort', category: 'resort', price: 8200, rating: 4.7, distance: '8.5 km', amenities: ['Kayaking', 'Organic Food', 'Yoga deck', 'Wi-Fi'], img: 'https://images.unsplash.com/photo-1584132967334-10e028bd69f7?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Sunset Beach Cabanas', category: 'resort', price: 5200, rating: 4.4, distance: '3.2 km', amenities: ['Cabanas', 'Bar', 'Beach Front', 'Wi-Fi'], img: 'https://images.unsplash.com/photo-1439066615861-d1af74d74000?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Grand Palace Hotel', category: 'hotel', price: 11000, rating: 4.8, distance: '0.8 km', amenities: ['Valet', 'Indoor Pool', 'Spa', 'Fine Dining', 'Bar'], img: 'https://images.unsplash.com/photo-1542314831-068cd1dbfeeb?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Nomad’s Cozy Dorms', category: 'hostel', price: 800, rating: 4.1, distance: '2.5 km', amenities: ['Free Wi-Fi', 'Bunk Beds', 'Shared Baths', 'Lockers'], img: 'https://images.unsplash.com/photo-1564507592333-c60657eea523?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Cliffside Sanctuary Villa', category: 'villa', price: 17500, rating: 4.9, distance: '6.2 km', amenities: ['Infinity Pool', 'Butler Service', 'Chef', 'Cinema Room'], img: 'https://images.unsplash.com/photo-1512917774080-9991f1c4c750?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Royal Orchid Suites', category: 'hotel', price: 7500, rating: 4.5, distance: '1.2 km', amenities: ['Balcony', 'Kitchenette', 'Room Service', 'Wi-Fi'], img: 'https://images.unsplash.com/photo-1596394516093-501ba68a0ba6?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Palms Eco-Lodge', category: 'resort', price: 6400, rating: 4.6, distance: '5.1 km', amenities: ['Solar Power', 'Eco Tours', 'Hammocks', 'Restaurant'], img: 'https://images.unsplash.com/photo-1506929562872-bb421503ef21?auto=format&fit=crop&w=400&q=80' },
+                { name: 'City Center Nest Hostel', category: 'hostel', price: 1100, rating: 4.2, distance: '0.2 km', amenities: ['Co-working Space', 'Coffee Shop', 'Pod Beds', 'Wi-Fi'], img: 'https://images.unsplash.com/photo-1520277739336-7bf77919cd6c?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Oceanfront Luxury Estate', category: 'villa', price: 22000, rating: 5.0, distance: '7.8 km', amenities: ['Helipad', 'Private Dock', 'Jacuzzi', 'Tennis Court', 'Wine Cellar'], img: 'https://images.unsplash.com/photo-1564013799919-ab600027ffc6?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Marine View Inn', category: 'hotel', price: 3800, rating: 4.3, distance: '1.9 km', amenities: ['Ocean Breezes', 'Terrace', 'Wi-Fi', 'Breakfast'], img: 'https://images.unsplash.com/photo-1445019980597-93fa8acb246c?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Coconut Grove Retreat', category: 'resort', price: 8900, rating: 4.7, distance: '4.3 km', amenities: ['Outdoor Gym', 'Hammock Zone', 'Swim-up Bar', 'Wi-Fi'], img: 'https://images.unsplash.com/photo-1571003123894-1f0594d2b5d9?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Pineapple Hostel', category: 'hostel', price: 900, rating: 4.0, distance: '3.0 km', amenities: ['Roof Bar', 'BBQ Area', 'Weekly Socials', 'Wi-Fi'], img: 'https://images.unsplash.com/photo-1590490360182-c33d57733427?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Whispering Pines Villa', category: 'villa', price: 12500, rating: 4.8, distance: '8.0 km', amenities: ['Pine Forest View', 'Hot Tub', 'Fire Pit', 'BBQ Grill'], img: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Serene Valley Hotel', category: 'hotel', price: 4900, rating: 4.4, distance: '3.5 km', amenities: ['Mountain View', 'Hiking Trails', 'Restaurant', 'Free Wi-Fi'], img: 'https://images.unsplash.com/photo-1498503182468-3b51cbb6cb24?auto=format&fit=crop&w=400&q=80' },
+                { name: 'Azure Sky Resort', category: 'resort', price: 10200, rating: 4.8, distance: '2.8 km', amenities: ['Infinity Pool', 'Private Beach', 'Cocktail Lounge', 'Yoga Class'], img: 'https://images.unsplash.com/photo-1582719508461-905c673771fd?auto=format&fit=crop&w=400&q=80' }
+            ];
+
+            state.simulatedLodging = baseLodgings.map((l, idx) => {
+                const hotelName = `${destination.split(',')[0]} ${l.name}`;
+                let isBooked = false;
+                if (state.activeTrip.selected_hotel) {
+                    isBooked = state.activeTrip.selected_hotel.toLowerCase().includes(l.name.toLowerCase());
+                }
+                const offsetLat = baseLat + (Math.sin(idx + 1.2) * 0.015);
+                const offsetLon = baseLon + (Math.cos(idx + 1.2) * 0.018);
+                return {
+                    id: idx + 1,
+                    name: hotelName,
+                    category: l.category,
+                    pricePerNight: l.price,
+                    totalCost: l.price * days,
+                    rating: l.rating,
+                    distance: l.distance,
+                    amenities: l.amenities,
+                    image: l.img,
+                    selected: isBooked,
+                    latitude: offsetLat,
+                    longitude: offsetLon
+                };
+            });
+        },
+
+        renderLodging() {
+            const container = document.getElementById('lodgings-list-container');
+            container.innerHTML = '';
+            
+            if (!state.activeTrip) {
+                container.innerHTML = `
+                    <div class="col-span-full glass-panel p-8 text-center text-slate-500 rounded-2xl">
+                        Please select or plan a trip first to view lodging recommendations.
+                    </div>
+                `;
+                return;
+            }
+            
+            this.initLodgingsData();
+            
+            const days = state.activeTrip.days || 3;
+            const categoryFilter = document.getElementById('lodging-filter-category').value;
+            let filtered = [...state.simulatedLodging];
+            
+            if (categoryFilter !== 'all') {
+                filtered = filtered.filter(l => l.category === categoryFilter);
+            }
+            
+            filtered.forEach(stay => {
+                const card = document.createElement('div');
+                card.className = `glass-panel overflow-hidden rounded-2xl flex flex-col justify-between hover:border-rose-500/30 transition-all duration-300 ${stay.selected ? 'border-rose-500/50 bg-rose-500/5' : ''}`;
+                
+                const amenitiesHTML = stay.amenities.map(a => `<span class="bg-slate-500/10 text-slate-400 text-[9px] font-semibold px-2 py-0.5 rounded-full">${a}</span>`).join(' ');
+                
+                card.innerHTML = `
+                    <div class="relative h-44 w-full">
+                        <img src="${stay.image}" class="w-full h-full object-cover">
+                        <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent"></div>
+                        <div class="absolute bottom-3 left-4 right-4 flex items-center justify-between">
+                            <span class="text-[10px] uppercase font-bold text-white bg-rose-500 px-2 py-0.5 rounded">${stay.category}</span>
+                            <div class="flex items-center gap-1 text-amber-400 bg-black/40 backdrop-blur-sm px-2 py-0.5 rounded text-xs font-semibold">
+                                <i data-lucide="star" class="w-3 h-3 fill-amber-400 text-transparent"></i> ${stay.rating}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-5 flex-1 flex flex-col justify-between space-y-4">
+                        <div class="space-y-1.5">
+                            <span class="font-bold text-base text-[var(--text-header)] block leading-snug">${stay.name}</span>
+                            <span class="text-[10px] text-slate-500 block"><i data-lucide="map-pin" class="w-3 h-3 inline mr-0.5"></i> ${stay.distance} from city center</span>
+                            <div class="flex flex-wrap gap-1.5 pt-2">
+                                ${amenitiesHTML}
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center justify-between border-t border-glass pt-3 mt-4">
+                            <div>
+                                <span class="text-[10px] text-slate-500 block">Total for ${days} nights</span>
+                                <span class="font-extrabold text-lg text-[var(--text-header)] block">₹${stay.totalCost.toLocaleString()}</span>
+                                <span class="text-[9px] text-slate-400 block">₹${stay.pricePerNight.toLocaleString()} / night</span>
+                            </div>
+                            <div class="flex gap-1.5">
+                                <button onclick="app.showBookingModal('lodging', ${stay.id})" class="px-3 py-1.5 ${stay.selected ? 'bg-emerald-600/10 text-emerald-400 border border-emerald-500/30' : 'bg-rose-600 hover:bg-rose-700 text-white'} font-bold text-[10px] rounded-lg transition-all shadow-md shrink-0 flex items-center gap-1">
+                                    <i data-lucide="${stay.selected ? 'check-circle' : 'shopping-bag'}" class="w-3 h-3"></i>
+                                    ${stay.selected ? 'Booked (Options)' : 'Book / Redirect'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+            lucide.createIcons();
+        },
+        
+        filterLodging() {
+            this.renderLodging();
+        },
+        
+        async bookLodging(stayId) {
+            if (!state.activeTrip) return;
+            const stay = state.simulatedLodging.find(l => l.id === stayId);
+            if (!stay) return;
+            
+            stay.selected = !stay.selected;
+            
+            if (stay.selected) {
+                // Deselect all other hotels in the simulated list
+                state.simulatedLodging.forEach(l => {
+                    if (l.id !== stayId) l.selected = false;
+                });
+                
+                const title = `Stay: ${stay.name}`;
+                const amount = stay.totalCost;
+                const date = state.activeTrip.start_date;
+                const category = 'accommodation';
+                
+                try {
+                    const response = await fetch(`/api/trips/${state.activeTrip.id}/expenses`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title, amount, category, date, paid_by: 'you', split_details: 'none' })
+                    });
+                    if (response.ok) {
+                        alert(`Successfully added stay costs (₹${amount.toLocaleString()}) to Expense Log!`);
+                        
+                        // Patch selected hotel and its specific coordinates directly to the database
+                        const hotelMarkdown = `**Hotel Name**: ${stay.name}\n- Category: ${stay.category}\n- Distance: ${stay.distance} from center\n- Rating: ${stay.rating}/5 ⭐\n- Amenities: ${stay.amenities.join(', ')}`;
+                        await fetch(`/api/trips/${state.activeTrip.id}`, {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                selected_hotel: hotelMarkdown,
+                                latitude: stay.latitude,
+                                longitude: stay.longitude
+                            })
+                        });
+
+                        // Inform chat agent
+                        await fetch(`/api/trips/${state.activeTrip.id}/chat`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ message: `I have booked the hotel ${stay.name}.` })
+                        });
+                        
+                        await this.refreshActiveTripDetails();
+                        
+                        // Dynamically update the map to center on new hotel coordinates
+                        if (state.mapInstance) {
+                            state.mapInstance.remove();
+                            state.mapInstance = null;
+                            this.initMap();
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error logging lodging booking expense:", e);
+                }
+            } else {
+                try {
+                    // Reset selected hotel
+                    await fetch(`/api/trips/${state.activeTrip.id}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            selected_hotel: ""
+                        })
+                    });
+                    await this.refreshActiveTripDetails();
+                    
+                    // Reset map
+                    if (state.mapInstance) {
+                        state.mapInstance.remove();
+                        state.mapInstance = null;
+                        this.initMap();
+                    }
+                } catch (e) {
+                    console.error("Error resetting lodging selection:", e);
+                }
+            }
+            this.renderLodging();
+        },
+        
+        redirectLodging(stayId) {
+            if (!state.activeTrip) return;
+            const stay = state.simulatedLodging.find(l => l.id === stayId);
+            if (!stay) return;
+            
+            const checkin = state.activeTrip.start_date || '';
+            const checkout = state.activeTrip.end_date || '';
+            const bookingUrl = `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(stay.name)}&checkin=${checkin}&checkout=${checkout}`;
+            
+            window.open(bookingUrl, '_blank');
+        },
+
+        bookLodgingFromMap(stayId) {
+            this.bookLodging(stayId);
+        },
+
+        async renderStories() {
+            const grid = document.getElementById('stories-feed-grid');
+            grid.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/stories');
+                if (response.ok) {
+                    const stories = await response.json();
+                    
+                    if (stories.length === 0) {
+                        grid.innerHTML = `
+                            <div class="col-span-full glass-panel p-8 text-center text-slate-500 rounded-2xl">
+                                No travel stories published yet. Be the first to share your journey!
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    stories.forEach(story => {
+                        const card = document.createElement('div');
+                        card.className = 'glass-panel rounded-2xl overflow-hidden flex flex-col justify-between hover:border-teal-500/30 transition-all duration-300';
+                        
+                        let cloneBtnHTML = '';
+                        if (story.trip_id) {
+                            cloneBtnHTML = `
+                                <button onclick="app.cloneStoryTrip(${story.trip_id})" class="text-xs font-bold bg-teal-600/10 hover:bg-teal-600 hover:text-white text-teal-500 dark:text-teal-400 px-3 py-1.5 rounded-lg border border-teal-500/20 transition-all flex items-center gap-1">
+                                    <i data-lucide="copy" class="w-3.5 h-3.5"></i> Clone Trip
+                                </button>
+                            `;
+                        }
+                        
+                        card.innerHTML = `
+                            <div class="h-48 w-full relative">
+                                <img src="${story.image_url}" class="w-full h-full object-cover">
+                                <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent"></div>
+                                <div class="absolute bottom-3 left-4">
+                                    <span class="text-xs text-teal-400 font-semibold block">Story By ${story.author_name}</span>
+                                    <span class="text-[10px] text-slate-400 block">${new Date(story.created_at || Date.now()).toLocaleDateString()}</span>
+                                </div>
+                            </div>
+                            <div class="p-6 flex-1 flex flex-col justify-between space-y-4">
+                                <div class="space-y-2">
+                                    <h4 class="font-extrabold text-base text-[var(--text-header)] leading-snug">${story.title}</h4>
+                                    <p class="text-xs text-slate-400 leading-relaxed line-clamp-3">${story.content}</p>
+                                </div>
+                                
+                                <div class="flex items-center justify-between border-t border-glass pt-3 mt-4">
+                                    <button onclick="app.likeStory(${story.id})" class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-teal-500 font-bold transition-all">
+                                        <i data-lucide="thumbs-up" class="w-4 h-4 text-teal-500"></i>
+                                        <span>${story.likes} Likes</span>
+                                    </button>
+                                    ${cloneBtnHTML}
+                                </div>
+                            </div>
+                        `;
+                        grid.appendChild(card);
+                    });
+                    lucide.createIcons();
+                }
+            } catch (err) {
+                console.error("Failed to render community stories:", err);
+            }
+        },
+        
+        showAddStoryModal(show) {
+            const modal = document.getElementById('story-modal');
+            if (show) {
+                modal.classList.remove('hidden');
+                if (state.activeTrip) {
+                    document.getElementById('story-title').value = `My Adventure in ${state.activeTrip.destination}`;
+                    document.getElementById('story-image').value = 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=800&q=80';
+                }
+            } else {
+                modal.classList.add('hidden');
+                document.getElementById('story-form').reset();
+            }
+        },
+        
+        async submitStoryForm(e) {
+            e.preventDefault();
+            const title = document.getElementById('story-title').value;
+            const content = document.getElementById('story-content').value;
+            const image_url = document.getElementById('story-image').value;
+            const author_name = state.userName || 'Guest Traveler';
+            const trip_id = state.activeTrip ? state.activeTrip.id : null;
+            
+            try {
+                const response = await fetch('/api/stories', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, content, author_name, image_url, trip_id })
+                });
+                
+                if (response.ok) {
+                    this.showAddStoryModal(false);
+                    this.renderStories();
+                }
+            } catch (err) {
+                alert("Failed to publish story: " + err.message);
+            }
+        },
+        
+        async likeStory(storyId) {
+            try {
+                const response = await fetch(`/api/stories/${storyId}/like`, { method: 'POST' });
+                if (response.ok) {
+                    this.renderStories();
+                }
+            } catch (err) {
+                console.error("Failed to like story:", err);
+            }
+        },
+        
+        async cloneStoryTrip(tripId) {
+            if (!confirm("Would you like to clone this entire itinerary into your active trips?")) return;
+            try {
+                const response = await fetch(`/api/trips/${tripId}/clone`, { method: 'POST' });
+                if (response.ok) {
+                    const result = await response.json();
+                    alert("Itinerary cloned successfully! Loading cloned trip...");
+                    await this.loadSavedTrips();
+                    await this.selectTrip(result.id);
+                } else {
+                    alert("Failed to clone trip itinerary");
+                }
+            } catch (err) {
+                alert("Cloning failed: " + err.message);
+            }
+        },
+
+        showBookingModal(type, itemId) {
+            const modal = document.getElementById('booking-options-modal');
+            if (type) {
+                state.pendingBookingType = type;
+                state.pendingBookingId = itemId;
+
+                const detailsContainer = document.getElementById('booking-modal-details');
+                const titleEl = document.getElementById('booking-modal-title');
+                const iconEl = document.getElementById('booking-modal-icon');
+                const internalTitleEl = document.getElementById('booking-modal-btn-internal-title');
+                const internalDescEl = document.getElementById('booking-modal-btn-internal-desc');
+
+                let detailsHtml = '';
+                let titleText = 'Booking Options';
+                let iconName = 'plane';
+                let isSelected = false;
+
+                if (type === 'flight') {
+                    const flight = state.simulatedFlights.find(f => f.id === itemId);
+                    if (flight) {
+                        isSelected = flight.selected;
+                        titleText = 'Book Flight';
+                        iconName = 'plane-takeoff';
+                        detailsHtml = `
+                            <div class="flex items-center justify-between font-bold text-sm text-[var(--text-header)] mb-2">
+                                <span>${flight.airline} (${flight.code})</span>
+                                <span class="text-blue-400">₹${flight.totalCost.toLocaleString()}</span>
+                            </div>
+                            <div class="grid grid-cols-3 text-[10px] text-slate-400 gap-2">
+                                <div><strong>Dep:</strong> ${flight.depTime}</div>
+                                <div><strong>Arr:</strong> ${flight.arrTime}</div>
+                                <div><strong>Duration:</strong> ${flight.duration}</div>
+                            </div>
+                        `;
+                    }
+                } else if (type === 'lodging') {
+                    const stay = state.simulatedLodging.find(l => l.id === itemId);
+                    if (stay) {
+                        isSelected = stay.selected;
+                        titleText = 'Book Stay';
+                        iconName = 'hotel';
+                        detailsHtml = `
+                            <div class="flex items-center justify-between font-bold text-sm text-[var(--text-header)] mb-2">
+                                <span>${stay.name}</span>
+                                <span class="text-rose-400">₹${stay.totalCost.toLocaleString()}</span>
+                            </div>
+                            <div class="grid grid-cols-2 text-[10px] text-slate-400 gap-2">
+                                <div><strong>Rating:</strong> ⭐ ${stay.rating}/5</div>
+                                <div><strong>Distance:</strong> ${stay.distance}</div>
+                            </div>
+                        `;
+                    }
+                }
+
+                detailsContainer.innerHTML = detailsHtml;
+                titleEl.innerText = titleText;
+                iconEl.setAttribute('data-lucide', iconName);
+                
+                if (isSelected) {
+                    internalTitleEl.innerText = "Remove from Budget";
+                    internalDescEl.innerText = "Remove this booking expense from your TripGenius budget log.";
+                } else {
+                    internalTitleEl.innerText = "Book & Add to Budget";
+                    internalDescEl.innerText = "Save this choice to your TripGenius expenses and update your budget split.";
+                }
+
+                modal.classList.remove('hidden');
+                lucide.createIcons();
+            } else {
+                modal.classList.add('hidden');
+                state.pendingBookingType = null;
+                state.pendingBookingId = null;
+            }
+        },
+
+        async confirmBookInternal() {
+            const type = state.pendingBookingType;
+            const id = state.pendingBookingId;
+            if (!type || !id) return;
+
+            this.showBookingModal(false);
+            if (type === 'flight') {
+                await this.bookFlight(id);
+            } else if (type === 'lodging') {
+                await this.bookLodging(id);
+            }
+        },
+
+        confirmBookExternal() {
+            const type = state.pendingBookingType;
+            const id = state.pendingBookingId;
+            if (!type || !id) return;
+
+            this.showBookingModal(false);
+            if (type === 'flight') {
+                this.redirectFlight(id);
+            } else if (type === 'lodging') {
+                this.redirectLodging(id);
+            }
+        },
+
+        showCollaboratorModal(show) {
+            const modal = document.getElementById('collaborator-modal');
+            if (show) {
+                if (!state.activeTrip) {
+                    alert("Please select a trip first before sharing.");
+                    return;
+                }
+                modal.classList.remove('hidden');
+                this.renderCollaborators();
+            } else {
+                modal.classList.add('hidden');
+                document.getElementById('collaborator-form').reset();
+            }
+        },
+        
+        async renderCollaborators() {
+            const list = document.getElementById('collaborators-list');
+            list.innerHTML = '';
+            
+            if (!state.activeTrip) return;
+            
+            try {
+                const response = await fetch(`/api/trips/${state.activeTrip.id}/collaborators`);
+                if (response.ok) {
+                    const collaborators = await response.json();
+                    state.activeTrip.collaborators = collaborators;
+                    
+                    if (collaborators.length === 0) {
+                        list.innerHTML = `<li class="py-4 text-center text-slate-500">No collaborators added yet.</li>`;
+                        return;
+                    }
+                    
+                    collaborators.forEach(c => {
+                        const li = document.createElement('li');
+                        li.className = 'py-2.5 flex items-center justify-between gap-4 text-slate-300 border-b border-glass last:border-0';
+                        li.innerHTML = `
+                            <span class="truncate">${c.email}</span>
+                            <button onclick="app.deleteCollaborator('${c.email}')" class="text-rose-500 hover:text-rose-600 transition-all">
+                                <i data-lucide="user-minus" class="w-4 h-4"></i>
+                            </button>
+                        `;
+                        list.appendChild(li);
+                    });
+                    lucide.createIcons();
+                }
+            } catch (err) {
+                console.error("Failed to render collaborators:", err);
+            }
+        },
+        
+        async addCollaborator(e) {
+            e.preventDefault();
+            const emailInput = document.getElementById('collaborator-email');
+            const email = emailInput.value.trim();
+            if (!email || !state.activeTrip) return;
+            
+            try {
+                const response = await fetch(`/api/trips/${state.activeTrip.id}/collaborators`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                
+                if (response.ok) {
+                    emailInput.value = '';
+                    await this.renderCollaborators();
+                    await this.refreshActiveTripDetails();
+                }
+            } catch (err) {
+                alert("Failed to add collaborator: " + err.message);
+            }
+        },
+        
+        async deleteCollaborator(email) {
+            if (!confirm(`Remove collaborator ${email}?`)) return;
+            try {
+                const response = await fetch(`/api/trips/${state.activeTrip.id}/collaborators/${email}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    await this.renderCollaborators();
+                    await this.refreshActiveTripDetails();
+                }
+            } catch (err) {
+                alert("Failed to remove collaborator: " + err.message);
+            }
+        },
+
+        async renderProfile() {
+            try {
+                const response = await fetch('/api/profile');
+                if (response.ok) {
+                    const profile = await response.json();
+                    state.profile = profile;
+                    state.userName = profile.name;
+                    state.userEmail = profile.email;
+                    this.updateAdminTabVisibility();
+                    
+                    document.getElementById('profile-input-name').value = profile.name;
+                    document.getElementById('profile-input-email').value = profile.email;
+                    document.getElementById('profile-input-airport').value = profile.home_airport;
+                    document.getElementById('profile-input-avatar').value = profile.avatar;
+                    
+                    if (profile.avatar) {
+                        document.getElementById('profile-details-avatar').src = profile.avatar;
+                        const headerAvatar = document.querySelector('header img');
+                        if (headerAvatar) headerAvatar.src = profile.avatar;
+                    }
+                    
+                    document.getElementById('profile-stat-trips').innerText = state.savedTrips.length;
+                    
+                    let activeSpent = 0;
+                    if (state.activeTrip && state.activeTrip.expenses) {
+                        state.activeTrip.expenses.forEach(e => activeSpent += e.amount);
+                    }
+                    document.getElementById('profile-stat-spent').innerText = `₹${activeSpent.toLocaleString()}`;
+                }
+            } catch (err) {
+                console.error("Failed to load profile details:", err);
+            }
+        },
+        
+        async submitProfileForm(e) {
+            e.preventDefault();
+            const name = document.getElementById('profile-input-name').value;
+            const email = document.getElementById('profile-input-email').value;
+            const home_airport = document.getElementById('profile-input-airport').value;
+            const avatar = document.getElementById('profile-input-avatar').value;
+            
+            try {
+                const response = await fetch('/api/profile', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, home_airport, avatar })
+                });
+                
+                if (response.ok) {
+                    alert("Profile updated successfully!");
+                    state.userName = name;
+                    state.userEmail = email;
+                    this.renderProfile();
+                }
+            } catch (err) {
+                alert("Failed to update profile settings: " + err.message);
+            }
+        },
+        
+        initCurrencyConverter() {
+            const amountInput = document.getElementById('currency-amount');
+            const fromSelect = document.getElementById('currency-from');
+            const toSelect = document.getElementById('currency-to');
+            
+            const calculate = () => {
+                const amount = parseFloat(amountInput.value) || 0;
+                const from = fromSelect.value;
+                const to = toSelect.value;
+                
+                const rates = {
+                    USD: 1,
+                    INR: 83.5,
+                    EUR: 0.92,
+                    GBP: 0.79
+                };
+                
+                const converted = (amount / rates[from]) * rates[to];
+                document.getElementById('currency-result-val').innerText = `${converted.toFixed(2)} ${to}`;
+            };
+            
+            amountInput.addEventListener('input', calculate);
+            fromSelect.addEventListener('change', calculate);
+            toSelect.addEventListener('change', calculate);
+            
+            calculate();
+        },
+
+        async renderAdmin() {
+            const statUsers = document.getElementById('admin-stat-users');
+            const statTrips = document.getElementById('admin-stat-trips');
+            const routesList = document.getElementById('admin-routes-list');
+            const usersTable = document.getElementById('admin-users-table-body');
+            
+            try {
+                const response = await fetch('/api/admin/metrics');
+                if (response.ok) {
+                    const metrics = await response.json();
+                    
+                    statUsers.innerText = metrics.users_count || 1;
+                    statTrips.innerText = metrics.trips_count || 0;
+                    document.getElementById('admin-stat-status').innerText = metrics.system_status || 'Healthy';
+                    
+                    const revenueEstimate = Math.round(metrics.expenses_sum / 83.5);
+                    const kpiCards = document.querySelectorAll('#tab-admin .glass-panel');
+                    if (kpiCards.length >= 3) {
+                        const span = kpiCards[2].querySelector('span:nth-child(2)');
+                        if (span) span.innerText = `$${revenueEstimate.toLocaleString()}`;
+                    }
+                    
+                    routesList.innerHTML = '';
+                    if (metrics.popular_destinations && metrics.popular_destinations.length > 0) {
+                        metrics.popular_destinations.forEach(r => {
+                            const li = document.createElement('li');
+                            li.className = 'py-2.5 flex items-center justify-between text-slate-300 border-b border-glass last:border-0';
+                            li.innerHTML = `
+                                <span>${r.destination}</span>
+                                <span class="bg-red-500/10 text-red-500 font-bold px-2 py-0.5 rounded text-[10px]">${r.count} Trip${r.count > 1 ? 's' : ''}</span>
+                            `;
+                            routesList.appendChild(li);
+                        });
+                    } else {
+                        routesList.innerHTML = `<li class="py-4 text-center text-slate-500 text-xs">No destinations planned yet.</li>`;
+                    }
+                    
+                    usersTable.innerHTML = '';
+                    const mockUsers = [
+                        { id: 1, name: state.userName || 'Traveler Genius', email: state.userEmail || 'traveler@tripgenius.ai', status: 'Active' },
+                        { id: 2, name: 'Sarah Jenkins', email: 'sarah.j@gmail.com', status: 'Active' },
+                        { id: 3, name: 'Michael Chang', email: 'mchang@yahoo.com', status: 'Banned' },
+                        { id: 4, name: 'Emma Watson', email: 'emma@watson.co.uk', status: 'Active' }
+                    ];
+                    
+                    if (!state.userStatusList) {
+                        state.userStatusList = {};
+                    }
+                    
+                    mockUsers.forEach(u => {
+                        const status = state.userStatusList[u.id] || u.status;
+                        const isBanned = status === 'Banned';
+                        
+                        const tr = document.createElement('tr');
+                        tr.className = `border-b border-glass text-slate-300 ${isBanned ? 'opacity-50' : ''}`;
+                        tr.innerHTML = `
+                            <td class="py-3 font-semibold text-[var(--text-header)]">${u.name}</td>
+                            <td class="py-3">${u.email}</td>
+                            <td class="py-3">
+                                <span class="px-2 py-0.5 text-[9px] font-bold rounded-full ${isBanned ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}">
+                                    ${status}
+                                </span>
+                            </td>
+                            <td class="py-3 text-right">
+                                <button onclick="app.toggleUserStatus(${u.id}, '${status}')" class="text-[10px] font-bold ${isBanned ? 'text-emerald-500 hover:text-emerald-400' : 'text-red-500 hover:text-red-400'} transition-all">
+                                    ${isBanned ? 'Unban' : 'Ban'}
+                                </button>
+                            </td>
+                        `;
+                        usersTable.appendChild(tr);
+                    });
+                }
+            } catch (err) {
+                console.error("Failed to load admin metrics:", err);
+            }
+        },
+        
+        toggleUserStatus(userId, currentStatus) {
+            if (!state.userStatusList) state.userStatusList = {};
+            const nextStatus = currentStatus === 'Active' ? 'Banned' : 'Active';
+            if (confirm(`Are you sure you want to change user status to ${nextStatus}?`)) {
+                state.userStatusList[userId] = nextStatus;
+                this.renderAdmin();
+            }
+        },
+
+        updateAdminTabVisibility() {
+            const adminTabBtn = document.getElementById('admin-tab-btn');
+            if (adminTabBtn) {
+                if (state.userEmail === 'admin@tripgenius.ai') {
+                    adminTabBtn.classList.remove('hidden');
+                } else {
+                    adminTabBtn.classList.add('hidden');
+                    if (state.activeTab === 'admin') {
+                        this.switchTab('itinerary');
+                    }
+                }
+            }
+        },
+
         showDemo() {
             if (state.savedTrips.length > 0) {
                 this.selectTrip(state.savedTrips[0].id);
             } else {
                 alert("You don't have any saved trips yet. Try planning a new trip!");
                 this.switchView('wizard');
+            }
+        },
+
+        async checkAuth() {
+            try {
+                const res = await fetch('/api/auth/me');
+                if (res.ok) {
+                    const authData = await res.json();
+                    if (authData.authenticated) {
+                        state.userEmail = authData.email;
+                        state.userName = authData.name || 'Traveler Genius';
+                        
+                        document.getElementById('view-auth').classList.add('hidden');
+                        document.getElementById('main-header').classList.remove('hidden');
+                        document.getElementById('main-app-container').classList.remove('hidden');
+                        
+                        // Update header avatar / name
+                        const nameSpan = document.getElementById('header-profile-name');
+                        if (nameSpan) nameSpan.innerText = state.userName.split(' ')[0] || 'Traveler';
+                        
+                        this.updateAdminTabVisibility();
+                        this.loadSavedTrips();
+                        this.initCurrencyConverter();
+                    } else {
+                        document.getElementById('view-auth').classList.remove('hidden');
+                        document.getElementById('main-header').classList.add('hidden');
+                        document.getElementById('main-app-container').classList.add('hidden');
+                    }
+                } else {
+                    document.getElementById('view-auth').classList.remove('hidden');
+                    document.getElementById('main-header').classList.add('hidden');
+                    document.getElementById('main-app-container').classList.add('hidden');
+                }
+            } catch (err) {
+                console.error("Auth check failed:", err);
+                document.getElementById('view-auth').classList.remove('hidden');
+                document.getElementById('main-header').classList.add('hidden');
+                document.getElementById('main-app-container').classList.add('hidden');
+            }
+        },
+
+        async login(email, password) {
+            try {
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    await this.checkAuth();
+                } else {
+                    alert(data.detail || "Login failed");
+                }
+            } catch (err) {
+                console.error("Login request failed:", err);
+                alert("An error occurred during login. Please try again.");
+            }
+        },
+
+        async register(name, email, password) {
+            try {
+                const res = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    await this.checkAuth();
+                } else {
+                    alert(data.detail || "Registration failed");
+                }
+            } catch (err) {
+                console.error("Registration request failed:", err);
+                alert("An error occurred during registration. Please try again.");
+            }
+        },
+
+        async logout() {
+            try {
+                const res = await fetch('/api/auth/logout', { method: 'POST' });
+                if (res.ok) {
+                    window.location.reload();
+                }
+            } catch (err) {
+                console.error("Logout request failed:", err);
             }
         }
     };
@@ -1139,6 +2331,50 @@ document.addEventListener('DOMContentLoaded', () => {
     expenseForm.addEventListener('submit', (e) => app.addExpense(e));
     chatForm.addEventListener('submit', (e) => app.sendChatMessage(e));
     document.getElementById('timeline-form').addEventListener('submit', (e) => app.submitTimelineForm(e));
+    document.getElementById('profile-edit-form').addEventListener('submit', (e) => app.submitProfileForm(e));
+    document.getElementById('story-form').addEventListener('submit', (e) => app.submitStoryForm(e));
+    document.getElementById('collaborator-form').addEventListener('submit', (e) => app.addCollaborator(e));
+
+    // Auth Forms Toggles
+    const toggleToRegister = document.getElementById('toggle-to-register');
+    const toggleToLogin = document.getElementById('toggle-to-login');
+    const loginForm = document.getElementById('auth-login-form');
+    const registerForm = document.getElementById('auth-register-form');
+
+    if (toggleToRegister) {
+        toggleToRegister.addEventListener('click', (e) => {
+            e.preventDefault();
+            loginForm.classList.add('hidden');
+            registerForm.classList.remove('hidden');
+        });
+    }
+
+    if (toggleToLogin) {
+        toggleToLogin.addEventListener('click', (e) => {
+            e.preventDefault();
+            registerForm.classList.add('hidden');
+            loginForm.classList.remove('hidden');
+        });
+    }
+
+    if (loginForm) {
+        loginForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            app.login(email, password);
+        });
+    }
+
+    if (registerForm) {
+        registerForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('register-name').value;
+            const email = document.getElementById('register-email').value;
+            const password = document.getElementById('register-password').value;
+            app.register(name, email, password);
+        });
+    }
 
     // Theme Switcher
     themeToggleBtn.addEventListener('click', () => {
@@ -1225,5 +2461,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Startup
-    app.loadSavedTrips();
+    (() => {
+        app.checkAuth();
+    })();
 });
